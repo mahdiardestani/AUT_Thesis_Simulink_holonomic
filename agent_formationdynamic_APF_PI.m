@@ -1,0 +1,471 @@
+close all 
+clear 
+clc
+
+%%
+% **In this simulation we want to  achieve formation dynamic with change position of leader  in AFP path planning with PI controller** % 
+%Variables
+global  tstep vmax vmax_leader sumerrorpi_pos sumerrorpi_theta
+vmax = 0.5;
+vmax_leader = 0.3;
+sumerrorpi_pos = zeros(2, 3);
+sumerrorpi_theta = zeros(1, 3);
+
+%Simulation time
+time_steps = 1000;
+tstep = 0.01;
+time_sim = linspace(0, time_steps*tstep, time_steps);
+
+%Number of agents
+N = 3;  
+
+%Adjacency Matrix
+A = [zeros(N-1,1) , eye(N-1); ones(1,1) , zeros(1, N-1)];
+
+%Position Vectors
+P = zeros(2, N, time_steps+1);  %X and y array
+Theta = zeros(1, N, time_steps+1);  %theta array
+
+%Random inialization of position and orentation
+alpha = 2;
+radious_agent = sqrt(3)/6 * alpha;
+% P(:, :, 1) = radious_agent * (rand(2, N) - 0.5);
+P(:, :, 1) = [0.1 0.2 0.3;0.1 0.2 0.3];
+Theta(:,:,1) = alpha * rand(1, 3);
+
+%Formation Variables
+%Controller for consensus 
+kp = 5;
+ki = 2;
+
+%Leader Variables
+Pleader = zeros(2, 1, time_steps+1);
+Thetaleader= zeros(1, 1, time_steps+1);
+
+%Initial Position of Leader
+Pleader(:, 1, 1) = [0.2; 0.2];
+Thetaleader(:, 1, 1) = 0;
+Rmatrix = [cos(Thetaleader(:,:, 1)), -sin(Thetaleader(:, :, 1)) ; -sin(Thetaleader(:, :, 1)), cos(Thetaleader(:, :, 1))];
+
+%Goal Position of Leader
+Pgoal = [3; 3];
+Thetagoal = 0;
+
+offset = 0.3; %This is for formation in half circle around leader
+
+%Desired position of agents
+Pstar = zeros(2, N, time_steps+1);
+Thetastar = zeros(1, N, time_steps+1);
+
+%Plot formation 
+Pplot = zeros(2, N+1, time_steps+1);
+Pplot(:, :,1) = zeros(2, N+1);
+
+%Variable for Error of postions
+%Xerror vector
+x1error = [];
+x2error = [];
+x3error = [];
+
+%Yerror vector
+y1error = [];
+y2error = [];
+y3error = [];
+
+tvec = [];
+%Artificial potential function variables
+
+%Create Obstacle
+numobs = 2;
+Pobstacle = zeros(2, numobs);
+Pobstacle(:, 1) = [2.8; 1];
+Pobstacle(:, 2) = [2; 1.5];
+
+%APF variables
+katt_leader = -2;%-10;
+katt_agent = -1;
+krep_leader = -1;%-50;
+krep_agent = -0.5;
+d_leader = 0.3; %m
+d_agent = 0.1;
+rho_obstacle_leader = 2.5; %m %15;
+rho_obstacle_agent = 2;
+
+%%
+%Simulation
+iteration = 1;
+Error = 1;
+t = tstep;
+
+while Error >= 0.1
+    
+    %Controlles 
+    tvec = [tvec, t];
+    t = t + tstep;
+
+    [U, W] = controller(P(:,:,iteration), Theta(:,:,iteration), A, Pstar(:,:, iteration), ...
+        Thetastar(:,:, iteration), kp, ki);
+
+    %Add disturbance to the Controller
+    if (t >= 8 && t <= 10)
+        
+        U = U - 0.8 * vmax_leader ;
+        W = W - 0.8 * vmax_leader ;
+    
+    end
+    
+    
+    %Derivative variables, these are velocities of agents
+    [P_dot, Theta_dot] = agents(P(:,:,iteration), Theta(:,:,iteration), U, W, Pobstacle , ...
+        rho_obstacle_agent, krep_agent, Pgoal, katt_agent, d_agent);
+    
+    %Update
+    %Agent Postion
+    P(:, :, iteration+1) = P(:, :, iteration) + tstep * P_dot;
+    Theta(:, :, iteration+1) = Theta(:, :, iteration) + tstep * Theta_dot;
+       
+    %Variables for triangle formation
+    Pplot(:, :, iteration+1) = [P(:, :, iteration+1), P(:, 1, iteration+1)];
+    
+    %Controller for position of leader with APF
+    [Upot] = potcontroller(Pleader(:, :, iteration), Pgoal, katt_leader, d_leader, Pobstacle, ...
+        rho_obstacle_leader, krep_leader);
+    
+    %Derivative variables, velocities of leader
+    [pdotleader] = pleaderpot(Pleader(:, :, iteration), Upot);
+    
+    %Update Postion of leader
+    Pleader(:, :, iteration+1) = Pleader(:, :, iteration) + pdotleader * tstep;
+    
+    Thetaleader(:, :, iteration+1) = atan2(Pleader(2, :, iteration+1) - Pleader(2, :, iteration), ...
+    Pleader(1, :, iteration+1) - Pleader(1, :, iteration));
+    
+    Rmatrix = [cos(Thetaleader(:,:, iteration+1)), -sin(Thetaleader(:, :, iteration+1)) ; 
+               sin(Thetaleader(:, :, iteration+1)), cos(Thetaleader(:, :, iteration+1))];
+
+    %Desired Position
+    Pstar(:, 1, iteration+1) =  Rmatrix * [0;offset]  + Pleader(:, :, iteration);
+    Pstar(:, 2, iteration+1) =  Rmatrix * [-offset;0] + Pleader(:, :, iteration);
+    Pstar(:, 3, iteration+1) =  Rmatrix * [0;-offset] + Pleader(:, :, iteration);
+
+    %Desired Theta
+    Thetastar(:, 1, iteration+1) = Thetaleader(:, :, iteration+1);
+    Thetastar(:, 2, iteration+1) = Thetaleader(:, :, iteration+1);
+    Thetastar(:, 3, iteration+1) = Thetaleader(:, :, iteration+1);
+    
+    iteration = iteration + 1;
+
+    Error = norm(Pgoal - Pleader(:, :, iteration));
+
+end
+
+%%
+%Plot
+
+%Update Plot variables
+P = P(:, :, 1:iteration);
+
+%Update vector position of agents
+Pstar = Pstar(:, :, 1:iteration);
+
+%Update vector of desired positions
+Pleader = Pleader(:, :, 1:iteration);
+
+%Update Pplot vector
+Pplot = Pplot(:, :, 1:iteration);
+
+for k = 2:iteration%time_steps
+   
+    x1error = [x1error Pstar(1, 1, k) - P(1, 1, k)];
+    x2error = [x2error Pstar(1, 2, k) - P(1, 2, k)];
+    x3error = [x3error Pstar(1, 3, k) - P(1, 3, k)];
+    
+    y1error = [y1error Pstar(2, 1, k) - P(2, 1, k)];
+    y2error = [y2error Pstar(2, 2, k) - P(2, 2, k)];
+    y3error = [y3error Pstar(2, 3, k) - P(2, 3, k)];
+        
+end
+
+
+fig = figure('Name','Dynamic Formation','NumberTitle','off');
+hold on
+
+plot(Pgoal(1, :), Pgoal(2, :), 'k*');   %Pgoal for desired postion
+plot(Pobstacle(1, :), Pobstacle(2, :), 'k>');   %Pobstacle for potential 
+
+%Create arrows of agent
+%Theta varaibles
+Lvec_agent = 0.0001;
+Lvec_leader = 0.0001;
+Agent_arrows = [];
+
+for i = 1:N
+    
+    anArrow = annotation('arrow');
+    anArrow.Parent = fig.CurrentAxes;
+    anArrow.Color = 'r';
+    anArrow.Position = [P(1, i, 1), P(2, i, 1), Lvec_agent*cos(Theta(:, i, 1)), Lvec_agent*sin(Theta(:, i, 1))];
+    Agent_arrows = [Agent_arrows anArrow];
+    
+end
+
+%Arrow of leader
+anArrowleader = annotation('arrow');
+anArrowleader.Parent = fig.CurrentAxes;
+anArrowleader.Color = 'k';
+
+grid on
+grid minor
+axis equal
+axis ([-1 4 -1 4])
+
+for k = 2:iteration%time_steps
+
+    %Position of Leader and Agents
+    plot(Pleader(1, :, k), Pleader(2, :, k), 'b^')  %Position of Leader
+    
+    plot(P(1, 1, k), P(2, 1, k), 'r.')  %Position of agent 1
+    plot(P(1, 2, k), P(2, 2, k), 'g.')  %Position of agent 2
+    plot(P(1, 3, k), P(2, 3, k), 'b.')  %Position of agent 3
+       
+    %Plot triangle formation
+    if (mod(k,40) == 0)
+        plot(Pplot(1, :, k), Pplot(2, :, k),'k-');  %Formation polygon
+    end
+    
+    for j = 1:N
+        
+        Agent_arrows(j).Position = [P(1, j, k), P(2, j, k), ...
+            Lvec_agent*cos(Theta(:, j, k)), Lvec_agent * sin(Theta(:, j, k))];
+        
+    end
+    
+    anArrowleader.Position = [Pleader(1, :, k), Pleader(2, :, k), ...
+        Lvec_leader * cos(Thetaleader(:, :, k)), Lvec_leader * sin(Thetaleader(:, :, k))];
+    
+    drawnow
+    pause(0)
+
+end
+
+%Plot Error of X position of agents
+figure('Name', 'Error of X position of agents', 'NumberTitle', 'off');
+hold on
+grid on
+grid minor
+plot(tvec, x1error,'r-');
+plot(tvec, x2error,'g--');
+plot(tvec, x3error, 'b:');
+legend({'X error of agent 1', 'X error of agent 2', 'X error of agent 3'}, 'Location', 'southeast')
+legend('boxoff')
+
+%Plot Error of Y position of agents
+figure('Name', 'Error of Y position of agents', 'NumberTitle', 'off');
+hold on
+grid on
+grid minor
+plot(tvec, y1error, 'r-');
+plot(tvec, y2error, 'g--');
+plot(tvec, y3error, 'b:');
+legend({'Y error of agent 1', 'Y error of agent 2', 'Y error of agent 3'}, 'Location', 'southeast')
+legend('boxoff')
+
+%Plot Trajectory, Initial, goal position of agents
+figure('Name','Trajectory and Special positaion of agents','NumberTitle','off');
+plot(reshape(P(1, :, :), [N, iteration]).', reshape(P(2,:,:), [N, iteration]).');
+hold on
+grid on 
+grid minor
+plot(P(1, :, iteration), P(2, :, iteration), 'k>')    %Final position
+plot(P(1, :, 1), P(2, :, 1), 'ko')  %Initial position
+plot(Pstar(1, :,iteration), Pstar(2, :, iteration), 'r*');    %Desired Final position
+plot(Pleader(1, :,iteration), Pleader(2, :,iteration), 'b^') %Final position of Leader
+plot(Pgoal(1, :), Pgoal(2, :), 'k*');   %Pgoal for desired postion
+plot(Pobstacle(1, :), Pobstacle(2, :), 'b>');   %Pobstacle for potential 
+axis equal
+axis ([-1 4 -1 4])
+
+%Plot meshgrid potential
+figure('Name', 'Surface of potential', 'NumberTitle', 'off');
+
+xx = 0:0.1:12;
+yy = 0:0.1:12;
+
+[X, Y] = meshgrid(xx, yy);
+Z = zeros(size(X));
+
+for i = 1:numel(xx)
+
+    for j = 1:numel(yy)
+        Z(i, j) = potential(X(i, j), Y(i, j), Pgoal, Pobstacle, katt_leader, krep_leader, d_leader, rho_obstacle_leader);
+    end
+
+end
+%Plot surface of potential
+surf(X, Y, Z)
+
+%%
+%Functions
+
+function [p_dot, theta_dot] = agent(p, theta, u, w, Pobstacle , rho_obstacle_agent, krep_agent, Pgoal, katt_agent, d_agent)
+    
+    global vmax
+    repforce = repulsive(p, Pobstacle, rho_obstacle_agent, krep_agent);
+    attforce = attractive(p, Pgoal, katt_agent, d_agent);
+    p_dot = u + repforce + attforce;
+    theta_dot = w;
+
+    if (norm(p_dot) >= vmax)
+        p_dot = p_dot/ norm(p_dot)* vmax;
+    end
+    
+end
+
+function [P_dot, Theta_dot] = agents(P, Theta, U, W, Pobstacle, rho_obstacle_agent, krep_agent, Pgoal, katt_agent, d_agent)
+
+    N = size(P, 2);
+    P_dot = zeros(size(P));
+    Theta_dot = zeros(size(Theta));
+
+    for i = 1:N
+        
+        [p_dot_tmp, theta_dot_tmp] = agent(P(:, i), Theta(:, i), U(:, i), W(:, i), Pobstacle, rho_obstacle_agent, krep_agent, Pgoal, katt_agent, d_agent);
+        P_dot(:, i) = p_dot_tmp;
+        Theta_dot(:, i) = theta_dot_tmp;  
+
+    end
+
+end
+
+function [U, W] = controller(P, Theta, A, Pstar, Thetastar, kp, ki)
+
+    global vmax sumerrorpi_pos  sumerrorpi_theta tstep
+    
+    N = size(P, 2);
+    U = zeros(size(P));
+    W = zeros(size(Theta));
+
+    for i = 1:N
+
+        sumerrorpi_pos(:, i) = sumerrorpi_pos(:, i) + tstep * (Pstar(:, i) - P(:, i));
+        U(:, i) = kp * (Pstar(:, i) - P(:, i)) + ki * sumerrorpi_pos(:, i);
+        sumerrorpi_theta(:, i) = sumerrorpi_theta(:, i) + tstep * (Thetastar(:, i) - Theta(:, i));
+        W(:, i) = kp * (Thetastar(:, i) - Theta(:, i)) + ki * sumerrorpi_theta(:, i);
+
+        for j = 1:N
+            
+            U(:, i) = U(:, i) + A(i, j) * (P(:, j) - P(:, i) - Pstar(:, j) + Pstar(:, i));
+            W(:, i) = W(:, i) + A(i, j) * (Theta(:, j) - Theta(:, i) - Thetastar(:, j) + Thetastar(:, i));            
+            
+        end
+
+    end
+
+end
+
+%Potential Function
+
+%Update pose of leader
+function [pdotleader] = pleaderpot(pleader,upot)
+    
+    global vmax_leader
+    pdotleader = zeros(size(pleader));
+    pdotleader = upot;
+    
+    %Saturaion for  leader velocity
+    if(norm(pdotleader) >= vmax_leader)
+        pdotleader = pdotleader/norm(pdotleader)*vmax_leader;
+    end
+
+end
+
+%Controller
+function [Upot] = potcontroller(Pleader, Pgoal, katt_leader, d_leader, Pobstacle , rho_obstacle_leader, krep_leader)
+    
+    Upot = zeros(size(Pleader));
+
+    attforce = attractive(Pleader, Pgoal, katt_leader, d_leader);
+    repforce = repulsive(Pleader, Pobstacle , rho_obstacle_leader, krep_leader);
+    Upot(:, 1) = attforce + repforce;
+
+end
+
+%Attractive force on leader position
+function [att] = attractive(Pleader, Pgoal, katt_leader, d_leader)
+
+    dist = Pleader - Pgoal;
+    temp = norm(dist);
+
+    if (temp <= d_leader)
+        att = katt_leader * (dist);
+    else 
+        att = (d_leader * katt_leader * dist) / temp;
+    end
+
+end
+
+
+%Attractive Potencial
+function [attpot_leader] = attractive_pot(Pleader, Pgoal, katt_leader, d_leader)
+
+    dist = Pleader - Pgoal;
+    temp = norm(dist);
+
+    if (temp <= d_leader)
+        attpot_leader = 0.5 * katt_leader * power(temp, 2);
+    else
+        attpot_leader = d_leader * katt_leader * temp - 0.5 * katt_leader * power(d_leader, 2);
+    end
+
+end
+
+%Repulsive force on position of leader
+function [rep] = repulsive(Pleader, Pobstacle, rho_obstacle_leader, krep_leader)
+    
+    rep = 0;
+    for i = 1:size(Pobstacle, 2)
+        
+        dist = Pleader - Pobstacle(:, i);
+        temp = norm(dist);
+        Grad_obstacle = dist/temp;
+    
+        if (temp <= rho_obstacle_leader)
+            rep = rep + -krep_leader * (1/temp - 1/rho_obstacle_leader) * (Grad_obstacle)/(temp^2);
+        else
+            rep = [0; 0];
+        end
+
+    end
+   
+end
+
+% Repulsive Potential
+function [reppot] = repulsive_pot(Pleader, Pobstacle, rho_obstacle_leader, krep_leader)
+   
+    reppot = 0;
+    for i = 1:size(Pobstacle, 2)
+
+        dist = Pleader - Pobstacle(:, i);
+        temp = norm(dist);
+    
+        if (temp <= rho_obstacle_leader)
+            reppot = reppot + 0.5 * -krep_leader * (1/(temp+1) - 1/rho_obstacle_leader);
+        else
+            reppot = 0;
+        end
+
+    end
+
+end
+
+%Potential function for plot surf
+function [pot] = potential(x, y, Pgoal, Pobstacle, katt_leader, krep_leader, d_leader, rho_obstacle_leader)
+
+    P = [x; y];
+    attpot = attractive_pot(P, Pgoal, katt_leader, d_leader);
+    reppot = repulsive_pot(P, Pobstacle, rho_obstacle_leader, krep_leader);
+    pot = attpot + reppot;
+
+end
+
+
