@@ -31,6 +31,7 @@ P(:, :, 1) = radious_agent * (rand(2, N) - 0.5);
 Theta(:,:,1) = alpha * rand(1, 3);
 
 %Formation Variables
+%P controller for consensus
 kp = 5;
 
 %Leader Variables
@@ -346,7 +347,6 @@ function [U, W] = controller(P, Theta, A, Pstar, Thetastar, kp)
     N = size(P, 2);
     U = zeros(size(P));
     W = zeros(size(Theta));
-    Errorpi = zeros(size(P));
 
     for i = 1:N
         

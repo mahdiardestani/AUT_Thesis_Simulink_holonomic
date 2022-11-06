@@ -3,19 +3,25 @@ clear
 clc
 
 %%
-% **In this simulation we want to achieve formation dynamic with change position of leader in AFP path planning** % 
+% **In this simulation we want to achieve formation dynamic with change position of leader in AFP path planning with PD controller** % 
 
 %Variables
-global vmax vmax_leader
-vmax = 0.5;
+global vmax omegamax vmax_leader Perror Perror_dot Thetaerorr Thetaerorrdot tstep
+%Number of agents
+N = 3;
+
+vmax = 0.5;     %m/s
+omegamax = 2;   %rad/s
 vmax_leader = 0.4;
+Perror = zeros(2, N);
+Perror_dot = zeros(2, N);
+Thetaerorr = zeros(1, N);
+Thetaerorrdot = zeros(1, N);
+
 %Simulation time
 time_steps = 1000;
 tstep = 0.01;
 time_sim = time_steps * tstep;
-
-%Number of agents
-N = 3;  
 
 %Adjacency Matrix
 A = [zeros(N-1,1) , eye(N-1); ones(1,1) , zeros(1, N-1)];
@@ -27,12 +33,16 @@ Theta = zeros(1, N, time_steps+1);  %theta array
 %Random inialization of position and orentation
 alpha = 2;
 radious_agent = sqrt(3)/6 * alpha;
-P(:, :, 1) = radious_agent * (rand(2, N) - 0.5);
+%P(:, :, 1) = radious_agent * (rand(2, N) - 0.5);
+P(:, :, 1) = [0.1 0.2 0.3;0.1 0.2 0.3];
+P(:, :, 2) = [0.1 0.2 0.3;0.1 0.2 0.3];
 Theta(:,:,1) = alpha * rand(1, 3);
+Theta(:,:,2) = alpha * rand(1, 3);
 
 %Formation Variables
-%P controller for consensus
+%PD controller for consensus
 kp = 5;
+kd = 0.5;
 
 %Leader Variables
 Pleader = zeros(2, 1, time_steps+1);
@@ -75,22 +85,9 @@ numobs = 2;
 Pobstacle = zeros(2, numobs);
 Pobstacle(:, 1) = [2.8; 1];
 Pobstacle(:, 2) = [2; 1.5];
-% Pobstacle(:, 1) = [2.8; 1]; %good
-% Pobstacle(:, 2) = [2; 1.5]; %good
-% Pobstacle(:, 1) = [1.6; 1.5]; %interested
-% Pobstacle(:, 2) = [1.8; 2.5]; %interested
-% Pobstacle(:, 1) = [1.8; 2.5]; %not bad
-% Pobstacle(:, 2) = [1; 1.3];   %not bad
-% Pobstacle(:, 1) = [1.8; 2.5]; %good
-% Pobstacle(:, 2) = [3; 1];     %good
-% Pobstacle(:, 1) = [1.8; 1];
-% Pobstacle(:, 2) = [2; 1.5];
-% Pobstacle(:, 1) = [0.5; 1]; %not bad
-% Pobstacle(:, 2) = [2.5; 1.5]; %not bad
-% Pobstacle(:, 3) = [8; 8];   %Good
-% Pobstacle(:, 3) = [7; 8]; %Local minumum problem can solve with change of katt and krep
-% Pobstacle(:, 4) = [3; 5];
-% Pobstacle(:, 3) = [3; 2];
+% Pobstacle(:, 1) = [20; 20];
+% Pobstacle(:, 2) = [50; 50];
+
 
 %APF variables
 katt_leader = -2;%-10;
@@ -104,7 +101,7 @@ rho_obstacle_agent = 2;
 
 %%
 %Simulation
-iteration = 1;
+iteration = 2;%1;
 Error = 1;
 t = tstep;
 tvec = [];
@@ -114,9 +111,22 @@ while Error >= 0.1
     %Controlles 
     tvec = [tvec, t];
     t = t + tstep;
-
+    Perror = Pstar(:, :, iteration - 1) - P(:, :, iteration - 1);
+    Thetaerorr = Thetastar(:, :, iteration - 1) - Theta(:, :, iteration - 1);
     [U, W] = controller(P(:,:,iteration), Theta(:,:,iteration), A, Pstar(:,:, iteration), ...
-        Thetastar(:,:, iteration), kp);
+        Thetastar(:,:, iteration), kp, kd);
+
+    %Add disturbance to the Controller
+    if (t >= 8 && t <= 10)
+        
+        U(:, 1) = U(:, 1) - 0.8 * vmax_leader ;
+        W(:, 1) = W(:, 1) - 0.8 * vmax_leader ;
+        U(:, 2) = U(:, 2) - 0.4 * vmax_leader ;
+        W(:, 2) = W(:, 2) - 0.4 * vmax_leader ;
+        U(:, 3) = U(:, 3) - 0.2 * vmax_leader ;
+        W(:, 3) = W(:, 3) - 0.2 * vmax_leader ;
+    
+    end
         
     
     %Derivative variables, these are velocities of agents
@@ -167,19 +177,20 @@ end
 %Plot
 
 %Update Plot variables
-P = P(:, :, 1:iteration);
+P = P(:, :, 3:iteration);
 
 %Update vector position of agents
-Pstar = Pstar(:, :, 1:iteration);
+Pstar = Pstar(:, :, 3:iteration);
 
 %Update vector of desired positions
-Pleader = Pleader(:, :, 1:iteration);
+Pleader = Pleader(:, :, 3:iteration);
 
 %Update Pplot vector
-Pplot = Pplot(:, :, 1:iteration);
+Pplot = Pplot(:, :, 3:iteration);
 
-for k = 2:iteration%time_steps
-   
+iteration = size(P, 3);
+for k = 1:iteration%time_steps
+
     x1error = [x1error Pstar(1, 1, k) - P(1, 1, k)];
     x2error = [x2error Pstar(1, 2, k) - P(1, 2, k)];
     x3error = [x3error Pstar(1, 3, k) - P(1, 3, k)];
@@ -193,14 +204,16 @@ end
 
 fig = figure('Name','Dynamic Formation','NumberTitle','off');
 hold on
-
+title('Dynamic Formation');
+xlabel({'x', 'meter'});
+ylabel({'y', 'meter'});
 plot(Pgoal(1, :), Pgoal(2, :), 'k*');   %Pgoal for desired postion
 plot(Pobstacle(1, :), Pobstacle(2, :), 'k>');   %Pobstacle for potential 
 
 %Create arrows of agent
 %Theta varaibles
-Lvec_agent = 0.0001;
-Lvec_leader = 0.0001;
+Lvec_agent = 0.1;
+Lvec_leader = 0.1;
 Agent_arrows = [];
 
 for i = 1:N
@@ -226,7 +239,7 @@ axis ([-1 4 -1 4])
 for k = 2:iteration%time_steps
 
     %Position of Leader and Agents
-    plot(Pleader(1, :, k), Pleader(2, :, k), 'b^')  %Position of Leader
+    plot(Pleader(1, :, k), Pleader(2, :, k), 'k.')  %Position of Leader
     
     plot(P(1, 1, k), P(2, 1, k), 'r.')  %Position of agent 1
     plot(P(1, 2, k), P(2, 2, k), 'g.')  %Position of agent 2
@@ -255,7 +268,10 @@ end
 %Plot Error of X position of agents
 figure('Name', 'Error of X position of agents', 'NumberTitle', 'off');
 hold on
+title('Error of x');
 grid on
+xlabel('Time');
+ylabel({'Error of x', 'meter'});
 grid minor
 plot(tvec, x1error,'r-');
 plot(tvec, x2error,'g--');
@@ -266,7 +282,10 @@ legend('boxoff')
 %Plot Error of Y position of agents
 figure('Name', 'Error of Y position of agents', 'NumberTitle', 'off');
 hold on
+title('Error of y');
 grid on
+xlabel({'Time', 'meter'});
+ylabel({'Error of y', 'meter'});
 grid minor
 plot(tvec, y1error, 'r-');
 plot(tvec, y2error, 'g--');
@@ -278,7 +297,10 @@ legend('boxoff')
 figure('Name','Trajectory and Special positaion of agents','NumberTitle','off');
 plot(reshape(P(1, :, :), [N, iteration]).', reshape(P(2,:,:), [N, iteration]).');
 hold on
-grid on 
+title('Trajectory');
+grid on
+xlabel({'x', 'meter'});
+ylabel({'y', 'meter'});
 grid minor
 plot(P(1, :, iteration), P(2, :, iteration), 'k>')    %Final position
 plot(P(1, :, 1), P(2, :, 1), 'ko')  %Initial position
@@ -313,15 +335,22 @@ surf(X, Y, Z)
 
 function [p_dot, theta_dot] = agent(p, theta, u, w, Pobstacle , rho_obstacle_agent, krep_agent, Pgoal, katt_agent, d_agent)
     
-    global vmax
+    global vmax omegamax
     repforce = repulsive(p, Pobstacle, rho_obstacle_agent, krep_agent);
     attforce = attractive(p, Pgoal, katt_agent, d_agent);
     p_dot = u + repforce + attforce;
     theta_dot = w;
 
+    %saturaion for Linear velocity
     if (norm(p_dot) >= vmax)
-        p_dot = p_dot/ norm(p_dot)* vmax;
+        p_dot = p_dot / norm(p_dot) * vmax;
     end
+
+    %saturation for Angular velocity
+    if(norm(theta_dot) >= omegamax)
+        theta_dot = theta_dot / norm(theta_dot) * omegamax; 
+    end
+    
     
 end
 
@@ -341,18 +370,20 @@ function [P_dot, Theta_dot] = agents(P, Theta, U, W, Pobstacle, rho_obstacle_age
 
 end
 
-function [U, W] = controller(P, Theta, A, Pstar, Thetastar, kp)
+function [U, W] = controller(P, Theta, A, Pstar, Thetastar, kp, kd)
 
-    global vmax
+    global vmax Perror Perror_dot  Thetaerorr Thetaerorrdot tstep
     N = size(P, 2);
     U = zeros(size(P));
     W = zeros(size(Theta));
-    Errorpi = zeros(size(P));
 
     for i = 1:N
         
-        U(:, i) = kp * (Pstar(:, i) - P(:, i));
-        W(:, i) = kp * (Thetastar(:, i) - Theta(:, i));
+        Perror_dot(:, i) = ((Pstar(:, i) - P(:, i)) - Perror(:, i)) / tstep;
+        U(:, i) = kp * (Pstar(:, i) - P(:, i)) + kd * Perror_dot(:, i);
+        Thetaerorrdot(:, i) = ((Thetastar(:, i) - Theta(:, i)) - Thetaerorr(:, i)) / tstep;
+        W(:, i) = kp * (Thetastar(:, i) - Theta(:, i)) + kd * Thetaerorrdot(:, i);
+        
         for j = 1:N
             
             U(:, i) = U(:, i) + A(i, j) * (P(:, j) - P(:, i) - Pstar(:, j) + Pstar(:, i));
@@ -372,10 +403,11 @@ function [pdotleader] = pleaderpot(pleader,upot)
     global vmax_leader
     pdotleader = zeros(size(pleader));
     pdotleader = upot;
+    %saturation for Linear velocity of Leader
     if(norm(pdotleader) >= vmax_leader)
-        pdotleader = pdotleader/norm(pdotleader)*vmax_leader;
+        pdotleader = pdotleader/norm(pdotleader) * vmax_leader;
     end
-
+    
 end
 
 %Controller

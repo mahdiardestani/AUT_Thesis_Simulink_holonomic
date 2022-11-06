@@ -17,7 +17,7 @@ P = zeros(2, 1, time_steps+1);
 P(:, :, 1) = [1; 3];
 
 %Create Obstacle
-numobs = 3;
+numobs = 5;
 Pobstacle = zeros(2, numobs);
 Pobstacle(:, 1) = [5; 5];
 Pobstacle(:, 2) = [3; 10];
@@ -153,7 +153,7 @@ function [rep] = repulsive(P, Pobstacle, rho_obstacle, krep)
         Grad_obstacle = dist/temp;
     
         if (temp <= rho_obstacle)
-            rep = rep + -krep * (1/temp - 1/rho_obstacle) * (Grad_obstacle)/(temp^2);
+            rep = rep + -krep * (1/(temp+1) - 1/rho_obstacle) * (Grad_obstacle)/(temp^2)
         else
             rep = [0; 0];
         end
@@ -171,7 +171,7 @@ function [reppot] = repulsive_pot(P, Pobstacle, rho_obstacle, krep)
         temp = norm(dist);
     
         if (temp <= rho_obstacle)
-            reppot = reppot + 0.5 * -krep * (1/temp - 1/rho_obstacle);
+            reppot = reppot + 0.5 * -krep * (1/(temp+1) - 1/rho_obstacle);
         else
             reppot = 0;
         end

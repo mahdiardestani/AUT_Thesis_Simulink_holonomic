@@ -1,4 +1,8 @@
 %parameters
+clc;
+close all; 
+clear all;
+
 %%
 time_steps = 200;
 delta_t = 0.1;

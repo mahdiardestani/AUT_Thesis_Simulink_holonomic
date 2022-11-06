@@ -8,8 +8,8 @@ clc
 
 %Variables
 %Simulation time
-time_steps = 100;
-tstep = 0.1;
+time_steps = 1000;
+tstep = 0.01;
 time_sim = time_steps * tstep;
 
 %Number of agents
