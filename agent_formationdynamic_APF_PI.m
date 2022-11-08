@@ -81,7 +81,7 @@ Pobstacle = zeros(2, numobs);
 Pobstacle(:, 1) = [2.8; 1];
 Pobstacle(:, 2) = [2; 1.5];
 % Pobstacle(:, 1) = [20; 20];
-% Pobstacle(:, 2) = [50; 50];
+% Pobstacle(:, 2) = [30; 30];
 
 %APF variables
 katt_leader = -2;%-10;
