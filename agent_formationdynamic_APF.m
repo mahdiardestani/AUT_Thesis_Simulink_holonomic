@@ -27,7 +27,8 @@ Theta = zeros(1, N, time_steps+1);  %theta array
 %Random inialization of position and orentation
 alpha = 2;
 radious_agent = sqrt(3)/6 * alpha;
-P(:, :, 1) = radious_agent * (rand(2, N) - 0.5);
+% P(:, :, 1) = radious_agent * (rand(2, N) - 0.5);
+P(:, :, 1) = [0.1 0.2 0.3;0.1 0.2 0.3];
 Theta(:,:,1) = alpha * rand(1, 3);
 
 %Formation Variables
@@ -73,8 +74,10 @@ y3error = [];
 %Create Obstacle
 numobs = 2;
 Pobstacle = zeros(2, numobs);
-Pobstacle(:, 1) = [2.8; 1];
-Pobstacle(:, 2) = [2; 1.5];
+Pobstacle(:, 1) = [20; 20];
+Pobstacle(:, 2) = [30; 30];
+% Pobstacle(:, 1) = [2.8; 1];
+% Pobstacle(:, 2) = [2; 1.5];
 % Pobstacle(:, 1) = [2.8; 1]; %good
 % Pobstacle(:, 2) = [2; 1.5]; %good
 % Pobstacle(:, 1) = [1.6; 1.5]; %interested
@@ -118,7 +121,18 @@ while Error >= 0.1
     [U, W] = controller(P(:,:,iteration), Theta(:,:,iteration), A, Pstar(:,:, iteration), ...
         Thetastar(:,:, iteration), kp);
         
+    %Add disturbance to the Controller
+    if (t >= 5 && t <= 8)
+        
+        U(:, 1) = U(:, 1) - 0.8 * vmax_leader ;
+        W(:, 1) = W(:, 1) - 0.8 * vmax_leader ;
+        U(:, 2) = U(:, 2) - 0.4 * vmax_leader ;
+        W(:, 2) = W(:, 2) - 0.4 * vmax_leader ;
+        U(:, 3) = U(:, 3) - 0.2 * vmax_leader ;
+        W(:, 3) = W(:, 3) - 0.2 * vmax_leader ;
     
+    end
+
     %Derivative variables, these are velocities of agents
     [P_dot, Theta_dot] = agents(P(:,:,iteration), Theta(:,:,iteration), U, W, Pobstacle , ...
         rho_obstacle_agent, krep_agent, Pgoal, katt_agent, d_agent);
@@ -193,14 +207,16 @@ end
 
 fig = figure('Name','Dynamic Formation','NumberTitle','off');
 hold on
-
+title('Dynamic Formation');
+xlabel({'x', 'meter'});
+ylabel({'y', 'meter'});
 plot(Pgoal(1, :), Pgoal(2, :), 'k*');   %Pgoal for desired postion
 plot(Pobstacle(1, :), Pobstacle(2, :), 'k>');   %Pobstacle for potential 
 
 %Create arrows of agent
 %Theta varaibles
-Lvec_agent = 0.0001;
-Lvec_leader = 0.0001;
+Lvec_agent = 0.01;
+Lvec_leader = 0.01;
 Agent_arrows = [];
 
 for i = 1:N
@@ -226,7 +242,7 @@ axis ([-1 4 -1 4])
 for k = 2:iteration%time_steps
 
     %Position of Leader and Agents
-    plot(Pleader(1, :, k), Pleader(2, :, k), 'b^')  %Position of Leader
+    plot(Pleader(1, :, k), Pleader(2, :, k), 'k.')  %Position of Leader
     
     plot(P(1, 1, k), P(2, 1, k), 'r.')  %Position of agent 1
     plot(P(1, 2, k), P(2, 2, k), 'g.')  %Position of agent 2
@@ -255,7 +271,10 @@ end
 %Plot Error of X position of agents
 figure('Name', 'Error of X position of agents', 'NumberTitle', 'off');
 hold on
+title('Error of x')
 grid on
+xlabel('Time');
+ylabel({'Error of x','meter'});
 grid minor
 plot(tvec, x1error,'r-');
 plot(tvec, x2error,'g--');
@@ -266,7 +285,10 @@ legend('boxoff')
 %Plot Error of Y position of agents
 figure('Name', 'Error of Y position of agents', 'NumberTitle', 'off');
 hold on
+title('Error of y');
 grid on
+xlabel('Time');
+ylabel({'Error of y', 'meter'});
 grid minor
 plot(tvec, y1error, 'r-');
 plot(tvec, y2error, 'g--');
@@ -278,7 +300,10 @@ legend('boxoff')
 figure('Name','Trajectory and Special positaion of agents','NumberTitle','off');
 plot(reshape(P(1, :, :), [N, iteration]).', reshape(P(2,:,:), [N, iteration]).');
 hold on
+title('Trajectory');
 grid on 
+xlabel({'x', 'meter'});
+ylabel({'y', 'meter'});
 grid minor
 plot(P(1, :, iteration), P(2, :, iteration), 'k>')    %Final position
 plot(P(1, :, 1), P(2, :, 1), 'ko')  %Initial position
