@@ -6,7 +6,7 @@ clc
 % **In this simulation we want to achieve formation dynamic with change position of leader in AFP path planning with PD controller** % 
 
 %Variables
-global vmax omegamax vmax_leader Perror Perror_dot Thetaerorr Thetaerorrdot tstep
+global vmax omegamax vmax_leader Perror Perror_dot Thetaerror Thetaerorr_dot tstep
 %Number of agents
 N = 3;
 
@@ -15,8 +15,8 @@ omegamax = 2;   %rad/s
 vmax_leader = 0.4;
 Perror = zeros(2, N);
 Perror_dot = zeros(2, N);
-Thetaerorr = zeros(1, N);
-Thetaerorrdot = zeros(1, N);
+Thetaerror = zeros(1, N);
+Thetaerorr_dot = zeros(1, N);
 
 %Simulation time
 time_steps = 1000;
@@ -112,7 +112,7 @@ while Error >= 0.1
     tvec = [tvec, t];
     t = t + tstep;
     Perror = Pstar(:, :, iteration - 1) - P(:, :, iteration - 1);
-    Thetaerorr = Thetastar(:, :, iteration - 1) - Theta(:, :, iteration - 1);
+    Thetaerror = Thetastar(:, :, iteration - 1) - Theta(:, :, iteration - 1);
     [U, W] = controller(P(:,:,iteration), Theta(:,:,iteration), A, Pstar(:,:, iteration), ...
         Thetastar(:,:, iteration), kp, kd);
 
@@ -188,7 +188,9 @@ Pleader = Pleader(:, :, 3:iteration);
 %Update Pplot vector
 Pplot = Pplot(:, :, 3:iteration);
 
+%Update iteration variable
 iteration = size(P, 3);
+
 for k = 1:iteration%time_steps
 
     x1error = [x1error Pstar(1, 1, k) - P(1, 1, k)];
@@ -372,7 +374,7 @@ end
 
 function [U, W] = controller(P, Theta, A, Pstar, Thetastar, kp, kd)
 
-    global vmax Perror Perror_dot  Thetaerorr Thetaerorrdot tstep
+    global vmax Perror Perror_dot  Thetaerror Thetaerorr_dot tstep
     N = size(P, 2);
     U = zeros(size(P));
     W = zeros(size(Theta));
@@ -381,8 +383,8 @@ function [U, W] = controller(P, Theta, A, Pstar, Thetastar, kp, kd)
         
         Perror_dot(:, i) = ((Pstar(:, i) - P(:, i)) - Perror(:, i)) / tstep;
         U(:, i) = kp * (Pstar(:, i) - P(:, i)) + kd * Perror_dot(:, i);
-        Thetaerorrdot(:, i) = ((Thetastar(:, i) - Theta(:, i)) - Thetaerorr(:, i)) / tstep;
-        W(:, i) = kp * (Thetastar(:, i) - Theta(:, i)) + kd * Thetaerorrdot(:, i);
+        Thetaerorr_dot(:, i) = ((Thetastar(:, i) - Theta(:, i)) - Thetaerror(:, i)) / tstep;
+        W(:, i) = kp * (Thetastar(:, i) - Theta(:, i)) + kd * Thetaerorr_dot(:, i);
         
         for j = 1:N
             
