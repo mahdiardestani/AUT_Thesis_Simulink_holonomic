@@ -45,7 +45,7 @@ Thetaleader= zeros(1, 1, time_steps+1);
 %Initial Position of Leader
 Pleader(:, 1, 1) = [0.2; 0.2];
 Thetaleader(:, 1, 1) = 0;
-Rmatrix = [cos(Thetaleader(:,:, 1)), -sin(Thetaleader(:, :, 1)) ; -sin(Thetaleader(:, :, 1)), cos(Thetaleader(:, :, 1))];
+Rmatrix = [cos(Thetaleader(:,:, 1)), -sin(Thetaleader(:, :, 1)) ; sin(Thetaleader(:, :, 1)), cos(Thetaleader(:, :, 1))];
 
 %Goal Position of Leader
 Pgoal = [3; 3];
